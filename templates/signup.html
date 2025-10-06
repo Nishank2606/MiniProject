@@ -122,14 +122,18 @@ a:hover {
 <div class="signup-container">
     <h2>Create Account</h2>
 
-    <!-- Server-side Error -->
-    {% if error %}
-    <div class="error-message" id="error-message">
-        <i class="fas fa-exclamation-circle"></i> {{ error }}
-    </div>
-    {% else %}
-    <div class="error-message" id="error-message"></div>
-    {% endif %}
+    <!-- Flask Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="error-message" id="error-message" style="display: block;">
+            <i class="fas fa-exclamation-circle"></i> {{ message }}
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="error-message" id="error-message"></div>
+      {% endif %}
+    {% endwith %}
 
     <form method="post" id="signup-form" action="{{ url_for('signup') }}">
         <div class="input-group">

@@ -44,6 +44,7 @@ body{background:var(--bg);color:var(--text-primary);min-height:100vh;overflow-x:
 
 /* Containers */
 .video-container,.chart-container,.system-status{background:var(--surface);border-radius:12px;padding:1.5rem;border:1px solid var(--border);box-shadow:0 4px 12px var(--shadow);margin-bottom:1.5rem;}
+.chart-container{max-height:400px;}
 
 /* Status indicators */
 .status-indicator{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;}
@@ -200,8 +201,8 @@ footer{text-align:center;margin-top:2rem;color:var(--text-secondary);}
           <h4 class="section-title"><i class="fas fa-video"></i> Live Security Feed</h4>
           <span class="alert-badge" id="alert-indicator"><i class="fas fa-triangle-exclamation me-1"></i> ALERT ACTIVE</span>
         </div>
-        <div class="ratio ratio-16x9">
-          <img src="" id="video-feed" alt="Live Security Camera Feed">
+        <div style="position: relative; width: 100%; max-width: 640px; margin: 0 auto;">
+          <img src="" id="video-feed" alt="Live Security Camera Feed" style="width: 100%; height: auto; border-radius: 8px;">
         </div>
         <div class="mt-3 text-center"><small><i class="fas fa-circle text-success me-1"></i> Real-time AI analysis with YOLO object detection and theft classification</small></div>
       </div>

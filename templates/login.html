@@ -107,7 +107,8 @@
     }
 
     input[type="text"],
-    input[type="password"] {
+    input[type="password"],
+    input[type="email"] {
       width: 100%;
       padding: 14px 42px;
       border: 1px solid var(--border);
@@ -187,12 +188,16 @@
       <h1>SecurityVision</h1>
     </div>
 
-    <!-- Flask Error Message -->
-    {% if error %}
-      <div id="error-message" class="error active">
-        <i class="fas fa-exclamation-circle"></i> {{ error }}
-      </div>
-    {% endif %}
+    <!-- Flask Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div id="error-message" class="error active">
+            <i class="fas fa-exclamation-circle"></i> {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
 
     <form id="login-form" method="post" action="{{ url_for('login') }}">
       <div class="input-group">

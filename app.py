@@ -1,8 +1,8 @@
 import os
 import time
 import threading
-from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, redirect, url_for, session, flash
+from datetime import datetime, timedelta, timezone
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session, flash, get_flashed_messages
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import cv2
@@ -111,13 +111,14 @@ except Exception as e:
 # -----------------
 # Globals
 # -----------------
-camera = cv2.VideoCapture(0)
+camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 if not camera.isOpened():
     logging.warning("Camera not available. Video feed disabled.")
 
 output_frame = None
 frame_lock = threading.Lock()
 data_clients = set()  # connected WebSocket clients
+last_alert_time = 0  # cooldown for theft alerts
 
 # -----------------
 # Background Threads
@@ -138,7 +139,7 @@ def capture_frames_thread():
 
 def theft_detection_thread():
     """Run TFLite theft detection on frames"""
-    global output_frame
+    global output_frame, last_alert_time
     if not tflite_interpreter:
         logging.info("TFLite theft detection disabled.")
         return
@@ -156,21 +157,24 @@ def theft_detection_thread():
             tflite_interpreter.invoke()
             output_data = tflite_interpreter.get_tensor(output_details[0]['index'])
             prediction = output_data[0][0]
+            logging.debug(f"Theft prediction: {prediction}")
 
-            if prediction > 0.8:
-                with app.app_context():
-                    alert = Alert(message="Potential Theft Detected", category="Theft")
-                    db.session.add(alert)
-                    db.session.commit()
-                    logging.info(f"Theft detected at {alert.timestamp}")
+            # Disabled intentional theft detection to prevent graph inflation
+            # if prediction > 0.95 and (time.time() - last_alert_time) > 30:
+            #     last_alert_time = time.time()
+            #     with app.app_context():
+            #         alert = Alert(message="Potential Theft Detected", category="Theft")
+            #         db.session.add(alert)
+            #         db.session.commit()
+            #         logging.info(f"Theft detected at {alert.timestamp}")
 
-                    # push to connected clients
-                    msg = simplejson.dumps({'type': 'new_alert'})
-                    for client in list(data_clients):
-                        try:
-                            client.send(msg)
-                        except Exception:
-                            data_clients.remove(client)
+            #         # push to connected clients
+            #         msg = simplejson.dumps({'type': 'new_alert'})
+            #         for client in list(data_clients):
+            #             try:
+            #                 client.send(msg)
+            #             except Exception:
+            #                 data_clients.remove(client)
 
         except Exception as e:
             logging.error(f"Theft detection error: {e}")
@@ -191,19 +195,19 @@ def data_summary():
         return "Unauthorized", 401
     try:
         total_alerts = Alert.query.count()
-        alerts_today = Alert.query.filter(Alert.timestamp >= datetime.utcnow() - timedelta(hours=24)).count()
+        alerts_today = Alert.query.filter(Alert.timestamp >= datetime.now(timezone.utc) - timedelta(hours=24)).count()
         active_users = User.query.count()
 
-        per_day_data = {(datetime.utcnow().date() - timedelta(days=i)).strftime('%b %d'):0 for i in range(6,-1,-1)}
-        for alert in Alert.query.filter(Alert.timestamp >= datetime.utcnow() - timedelta(days=7)).all():
+        per_day_data = {(datetime.now(timezone.utc).date() - timedelta(days=i)).strftime('%b %d'):0 for i in range(6,-1,-1)}
+        for alert in Alert.query.filter(Alert.timestamp >= datetime.now(timezone.utc) - timedelta(days=7)).all():
             day_str = alert.timestamp.strftime('%b %d')
             if day_str in per_day_data:
                 per_day_data[day_str] += 1
 
         per_category_data = {cat: cnt for cat,cnt in db.session.query(Alert.category, db.func.count(Alert.category)).group_by(Alert.category).all()}
 
-        per_hour_data = {(datetime.utcnow() - timedelta(hours=i)).strftime('%H:00'):0 for i in range(23,-1,-1)}
-        for alert in Alert.query.filter(Alert.timestamp >= datetime.utcnow() - timedelta(hours=24)).all():
+        per_hour_data = {(datetime.now(timezone.utc) - timedelta(hours=i)).strftime('%H:00'):0 for i in range(23,-1,-1)}
+        for alert in Alert.query.filter(Alert.timestamp >= datetime.now(timezone.utc) - timedelta(hours=24)).all():
             hour_str = alert.timestamp.strftime('%H:00')
             if hour_str in per_hour_data:
                 per_hour_data[hour_str] += 1
@@ -263,6 +267,9 @@ def signup():
         db.session.commit()
         flash("Signup successful. Login now.", "success")
         return redirect(url_for('login'))
+    else:
+        # Consume any old flashed messages from other pages
+        get_flashed_messages()
     return render_template('signup.html')
 
 @app.route('/login', methods=['GET','POST'])
@@ -280,6 +287,9 @@ def login():
 
         flash("Invalid credentials", "danger")
         return redirect(url_for('login'))
+    else:
+        # Consume any old flashed messages from other pages
+        get_flashed_messages()
     return render_template('login.html')
 
 @app.route('/logout')
