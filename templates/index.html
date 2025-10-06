@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecurityVision Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231e6fd9' d='M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M12,7C13.4,7 14.8,8.6 14.8,10V11.5C15.4,11.5 16,12.1 16,12.7V16.5C16,17.1 15.4,17.7 14.8,17.7H9.2C8.6,17.7 8,17.1 8,16.5V12.6C8,12 8.6,11.4 9.2,11.4V10C9.2,8.6 10.6,7 12,7M12,8.2C11.2,8.2 10.5,8.7 10.5,9.5V11.5H13.5V9.5C13.5,8.7 12.8,8.2 12,8.2Z'/%3E%3C/svg%3E">
+
+<style>
+:root {
+  --primary:#1e6fd9; --primary-gradient:linear-gradient(135deg,#1e6fd9,#4d8fea);
+  --bg:#0f172a; --surface:#1e293b; --surface-alt:#273549; 
+  --text-primary:#f1f5f9; --text-secondary:#94a3b8; --border:#334155; --shadow:rgba(0,0,0,0.4);
+  --error:#ef4444; --success:#10b981; --card-number:#fff;
+}
+body.light-mode {
+  --bg:#f8f9fa; --surface:#fff; --surface-alt:#f1f3f5; 
+  --text-primary:#1e293b; --text-secondary:#64748b; --border:#d1d5db; --shadow:rgba(0,0,0,0.1);
+  --card-number:#000;
+}
+*{font-family:"Inter",sans-serif;margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text-primary);min-height:100vh;overflow-x:hidden;}
+
+/* Navigation */
+.navbar-custom{background:var(--surface);padding:1rem 1.5rem;border-radius:12px;margin:1rem 0.5rem 1.5rem;border:1px solid var(--border);box-shadow:0 4px 12px var(--shadow);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;}
+.logo{display:flex;align-items:center;gap:.75rem;}
+.logo-img{width:40px;height:40px;background:var(--primary-gradient);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem;flex-shrink:0;}
+.logo h1{font-size:1.5rem;font-weight:700;margin:0;background:var(--primary-gradient);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;}
+.user-info{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;}
+.btn-logout,.mode-toggle{border:none;border-radius:8px;padding:.5rem 1rem;font-weight:600;color:#fff;background:var(--primary-gradient);cursor:pointer;transition:.3s;display:flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap;}
+.btn-logout:hover,.mode-toggle:hover{transform:translateY(-2px);box-shadow:0 6px 15px rgba(30,111,217,.3);}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 12px var(--shadow);transition:.3s;height:100%;margin-bottom:1rem;}
+.card:hover{transform:translateY(-5px);box-shadow:0 8px 20px var(--shadow);}
+.card-body{padding:1.5rem;text-align:center;}
+.data-card-icon{font-size:2.5rem;margin-bottom:1rem;background:var(--primary-gradient);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.card h5{font-weight:600;color:var(--text-secondary);font-size:.9rem;margin-bottom:.5rem;}
+.card h3{font-weight:700;font-size:1.8rem;margin:0;color:var(--card-number)!important;}
+
+/* Containers */
+.video-container,.chart-container,.system-status{background:var(--surface);border-radius:12px;padding:1.5rem;border:1px solid var(--border);box-shadow:0 4px 12px var(--shadow);margin-bottom:1.5rem;}
+
+/* Status indicators */
+.status-indicator{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;}
+.status-online{background-color:var(--success);box-shadow:0 0 8px var(--success);}
+.status-offline{background-color:var(--error);}
+
+/* Alerts */
+.alert-badge{background:var(--error);color:#fff;padding:6px 12px;border-radius:20px;font-size:.8rem;font-weight:600;animation:pulse 2s infinite;display:none;}
+@keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.05);}}
+.recent-alerts{max-height:300px;overflow-y:auto;margin-top:1rem;}
+.alert-item{background:var(--surface-alt);padding:12px;margin:8px 0;border-radius:8px;border-left:4px solid var(--error);font-size:.9rem;}
+.alert-time{color:var(--text-secondary);font-size:.8rem;}
+
+/* Typography */
+.section-title{font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;}
+.section-title i{color:var(--primary);}
+.no-alerts{text-align:center;padding:2rem;font-style:italic;color:var(--text-secondary);}
+
+/* Layout */
+.container-fluid{padding:0 .5rem;}
+footer{text-align:center;margin-top:2rem;color:var(--text-secondary);}
+
+/* Responsive improvements */
+@media(min-width:576px){
+  .container-fluid{padding:0 1rem;}
+  .logo h1{font-size:1.5rem;}
+  .system-status .row{text-align:left;}
+}
+
+@media(min-width:768px){
+  .container-fluid{padding:0 1.5rem;}
+  .card-body{padding:1.5rem;}
+}
+
+@media(max-width:576px){
+  .user-info span,.btn-logout span{display:none;}
+  .btn-logout,.mode-toggle{width:40px;height:40px;padding:0;}
+  .navbar-custom{padding:0.75rem 1rem;}
+  .logo h1{font-size:1.25rem;}
+  .data-card-icon{font-size:2rem;}
+  .card h3{font-size:1.5rem;}
+  .section-title{font-size:1.1rem;}
+  .video-container,.chart-container,.system-status{padding:1rem;}
+}
+
+/* Extra small devices */
+@media(max-width:400px){
+  .logo h1{font-size:1rem;}
+  .navbar-custom{gap:0.5rem;}
+}
+
+/* Ensure white text for specific elements */
+.card small, .video-container small {
+  color: #ffffff !important;
+  font-weight: 500;
+}
+
+/* Make sure video feed is responsive */
+#video-feed {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+</style>
+</head>
+<body>
+<div class="container-fluid py-3">
+  <!-- Navbar -->
+  <div class="navbar-custom">
+    <div class="logo">
+      <div class="logo-img"><i class="fas fa-shield-alt"></i></div>
+      <h1>SecurityVision</h1>
+    </div>
+    <div class="user-info">
+      <span class="d-none d-sm-inline">Welcome, <strong>{{ username }}</strong></span>
+      <a href="{{ url_for('logout') }}" class="btn-logout">
+        <i class="fas fa-right-from-bracket me-1 d-none d-sm-inline"></i>
+        <i class="fas fa-right-from-bracket d-sm-none"></i>
+        <span class="d-none d-sm-inline">Logout</span>
+      </a>
+      <button class="mode-toggle ms-2" id="mode-toggle" title="Toggle Dark/Light Mode">
+        <i class="fas fa-moon"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- System Status -->
+  <div class="system-status">
+    <div class="row text-center text-md-start">
+      <div class="col-md-4 mb-3">
+        <h5 class="section-title"><i class="fas fa-server"></i> System Status</h5>
+        <div><span class="status-indicator status-online"></span><span id="system-status">All Systems Operational</span></div>
+      </div>
+      <div class="col-md-4 mb-3">
+        <h5 class="section-title"><i class="fas fa-brain"></i> AI Models</h5>
+        <div id="model-status"><span class="status-indicator status-online"></span> YOLO: Loaded | TFLite: Active</div>
+      </div>
+      <div class="col-md-4 mb-3">
+        <h5 class="section-title"><i class="fas fa-video"></i> Camera Feed</h5>
+        <div id="feed-status"><span class="status-indicator status-online"></span><span id="camera-status-text">Live</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Cards -->
+  <div class="row mb-4">
+    <div class="col-sm-6 col-lg-3 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <i class="fas fa-bell data-card-icon"></i>
+          <h5>Total Alerts</h5>
+          <h3 id="total-alerts">0</h3>
+          <small>All time security alerts</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <i class="fas fa-calendar-day data-card-icon"></i>
+          <h5>Today's Alerts</h5>
+          <h3 id="alerts-today">0</h3>
+          <small>Alerts in last 24 hours</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <i class="fas fa-users data-card-icon"></i>
+          <h5>Active Users</h5>
+          <h3 id="active-users">0</h3>
+          <small>Registered system users</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3 mb-3">
+      <div class="card">
+        <div class="card-body">
+          <i class="fas fa-shield-alt data-card-icon"></i>
+          <h5>Detection Rate</h5>
+          <h3 id="detection-rate">98%</h3>
+          <small>AI accuracy</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Camera Feed & Alerts -->
+  <div class="row mb-4">
+    <div class="col-lg-8 mb-4">
+      <div class="video-container">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <h4 class="section-title"><i class="fas fa-video"></i> Live Security Feed</h4>
+          <span class="alert-badge" id="alert-indicator"><i class="fas fa-triangle-exclamation me-1"></i> ALERT ACTIVE</span>
+        </div>
+        <div class="ratio ratio-16x9">
+          <img src="" id="video-feed" alt="Live Security Camera Feed">
+        </div>
+        <div class="mt-3 text-center"><small><i class="fas fa-circle text-success me-1"></i> Real-time AI analysis with YOLO object detection and theft classification</small></div>
+      </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="section-title"><i class="fas fa-clock-rotate-left"></i> Recent Alerts</h5>
+          <div class="recent-alerts" id="recent-alerts">
+            <div class="no-alerts" id="no-alerts">
+              <i class="fas fa-check-circle mb-2"></i>
+              <div>No recent alerts</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alerts Chart -->
+  <div class="chart-container">
+    <h4 class="section-title"><i class="fas fa-chart-bar"></i> Security Alerts Over Time</h4>
+    <canvas id="alertsChart" height="120"></canvas>
+  </div>
+</div>
+
+<footer class="container-fluid mt-5 mb-4 text-center">
+  <a href="#" class="brand-logo d-inline-flex align-items-center gap-2 text-decoration-none">
+    <div class="brand-logo-icon" style="width:32px;height:32px;background:var(--primary-gradient);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;">
+      <i class="fas fa-shield-alt"></i>
+    </div>
+    <span class="brand-logo-text" style="font-weight:700;font-size:1.4rem;background:var(--primary-gradient);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">SecurityVision</span>
+  </a>
+</footer>
+
+<script>
+let alertChart=null,lastAlertCount=0;
+
+async function fetchData(){
+  try{
+    const res=await fetch('/api/data_summary'),data=await res.json();
+    document.getElementById('total-alerts').innerText=data.total_alerts;
+    document.getElementById('alerts-today').innerText=data.alerts_today;
+    document.getElementById('active-users').innerText=data.active_users;
+    updateChart(data);
+    if(data.total_alerts>lastAlertCount){
+        showNewAlertIndicator();
+        lastAlertCount=data.total_alerts;
+    }
+  }catch(e){
+    console.error(e);
+    document.getElementById('system-status').innerHTML='<span class="text-warning">Connection issues</span>';
+  }
+}
+
+async function fetchRecentAlerts(){
+  try{
+    const res=await fetch('/api/get_alerts'),
+    alerts=await res.json();
+    const container=document.getElementById('recent-alerts');
+    const noAlerts=document.getElementById('no-alerts');
+    if(alerts.length===0){noAlerts.style.display='block';return;}
+    noAlerts.style.display='none';
+    container.innerHTML=alerts.map(alert=>`
+    <div class="alert-item">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <i class="fas fa-exclamation-triangle text-danger me-1">
+                </i>
+                <strong>Security Alert</strong>
+            </div>
+            <small class="alert-time">${alert.timestamp.split(' ')[1]}</small>
+        </div>
+        <div class="small mt-1">${alert.message}</div>
+    </div>`).join('');
+  }catch(e){console.error(e);}
+}
+
+function updateChart(data){
+  const ctx=document.getElementById('alertsChart').getContext('2d'),chartData={labels:Object.keys(data.per_day),
+    datasets:[{label:'Security Alerts per Day',
+    data:Object.values(data.per_day),
+    backgroundColor:'rgba(30,111,217,0.6)',
+    borderColor:'rgba(30,111,217,1)',
+    borderWidth:2,
+    borderRadius:5,
+    tension:.3,
+    fill:true}]},
+    options={
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{legend:{display:false},
+        tooltip:{backgroundColor:'rgba(30,41,59,0.9)',
+        titleColor:'#f1f5f9',
+        bodyColor:'#f1f5f9',
+        borderColor:'rgba(30,111,217,0.5)',
+        borderWidth:1}
+                },
+        scales:{x:{ticks:{color:'#94a3b8'},
+        grid:{color:'rgba(148,163,184,0.1)'}
+                  },
+        y:{
+            beginAtZero:true,
+            ticks:{color:'#94a3b8'},
+            grid:{color:'rgba(148,163,184,0.1)'}}}};
+  if(alertChart){
+    alertChart.data=chartData;
+    alertChart.options=options;
+    alertChart.update();
+}
+  else alertChart=new Chart(ctx,{type:'line',data:chartData,options:options});
+}
+
+function showNewAlertIndicator(){
+  const ind=document.getElementById('alert-indicator');
+  ind.style.display='inline-block';
+  ind.style.animation='none';
+  setTimeout(()=>ind.style.animation='pulse .5s ease-in-out 3',10);
+  setTimeout(()=>ind.style.display='none',10000);
+}
+
+function monitorVideoFeed(){
+  const videoElement = document.getElementById('video-feed');
+  const feedStatus = document.getElementById('feed-status');
+  const cameraStatusText = document.getElementById('camera-status-text');
+
+  const socket = new WebSocket(`ws://${window.location.host}/ws/video_feed`);
+
+  socket.onopen = () => {
+    console.log("Video WebSocket connection established");
+    feedStatus.innerHTML = '<span class="status-indicator status-online"></span><span class="text-success">Camera: Active</span>';
+  };
+
+  socket.onmessage = (event) => {
+    videoElement.src = URL.createObjectURL(event.data);
+  };
+
+  socket.onclose = () => {
+    console.log("Video WebSocket connection closed");
+    feedStatus.innerHTML = '<span class="status-indicator status-offline"></span><span class="text-danger">Camera: Disconnected</span>';
+  };
+
+  socket.onerror = (error) => {
+    console.error("WebSocket error:", error);
+    feedStatus.innerHTML = '<span class="status-indicator status-offline"></span><span class="text-danger">Camera: Error</span>';
+  };
+}
+
+document.getElementById('mode-toggle').addEventListener('click',()=>{
+  document.body.classList.toggle('light-mode');
+  const icon=document.querySelector('#mode-toggle i');
+  icon.classList.toggle('fa-moon'); icon.classList.toggle('fa-sun');
+});
+
+document.addEventListener('DOMContentLoaded',
+()=>{fetchData();
+    fetchRecentAlerts();
+    setInterval(fetchData,3000);
+    setInterval(fetchRecentAlerts,2000);
+    monitorVideoFeed();
+});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){fetchData();fetchRecentAlerts();}});
+</script>
+</body>
+</html>
