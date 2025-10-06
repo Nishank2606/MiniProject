@@ -1,4 +1,11 @@
 import os
+import warnings
+
+# Suppress warnings before any imports
+warnings.simplefilter("ignore", UserWarning)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 import time
 import threading
 from datetime import datetime, timedelta, timezone
@@ -17,9 +24,6 @@ import logging
 # Logging Setup
 # -----------------
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-
-# Suppress TensorFlow verbose logs
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # -----------------
 # App Config
@@ -111,9 +115,14 @@ except Exception as e:
 # -----------------
 # Globals
 # -----------------
-camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-if not camera.isOpened():
-    logging.warning("Camera not available. Video feed disabled.")
+camera = None
+if os.getenv('VERCEL') is None:  # Only initialize camera if not on Vercel
+    camera = cv2.VideoCapture(0)
+    if not camera.isOpened():
+        logging.warning("Camera not available. Video feed disabled.")
+        camera = None
+else:
+    logging.info("Running on Vercel: Camera access disabled.")
 
 output_frame = None
 frame_lock = threading.Lock()
@@ -126,6 +135,9 @@ last_alert_time = 0  # cooldown for theft alerts
 def capture_frames_thread():
     """Continuously capture frames from the camera"""
     global output_frame
+    if camera is None:
+        logging.info("Camera not initialized. Capture thread disabled.")
+        return
     while True:
         try:
             success, frame = camera.read()
@@ -304,13 +316,18 @@ def logout():
 @sock.route('/ws/video_feed')
 def ws_video_feed(ws):
     global output_frame
+    logging.info("WebSocket video feed started")
     while True:
         try:
             with frame_lock:
                 if output_frame is None:
+                    logging.debug("No frame available")
                     time.sleep(0.01)
                     continue
                 frame = output_frame.copy()
+
+            # Increase brightness and contrast
+            frame = cv2.convertScaleAbs(frame, alpha=3.0, beta=150)
 
             small_frame = cv2.resize(frame, (640,480))
             annotated = small_frame
@@ -321,10 +338,12 @@ def ws_video_feed(ws):
 
             ret, buffer = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY),65])
             if ret:
+                logging.debug("Sending frame")
                 ws.send(buffer.tobytes())
 
             time.sleep(1/25)
-        except Exception:
+        except Exception as e:
+            logging.error(f"WebSocket error: {e}")
             break
 
 @sock.route('/ws/data_updates')
@@ -344,7 +363,8 @@ def ws_data_updates(ws):
 # -----------------
 if __name__ == '__main__':
     ensure_database()
-    threading.Thread(target=capture_frames_thread, daemon=True).start()
-    threading.Thread(target=theft_detection_thread, daemon=True).start()
+    if os.getenv('VERCEL') is None:
+        threading.Thread(target=capture_frames_thread, daemon=True).start()
+        threading.Thread(target=theft_detection_thread, daemon=True).start()
     logging.info("Server running at http://127.0.0.1:5000/")
     app.run(host='0.0.0.0', port=5000, debug=True)
