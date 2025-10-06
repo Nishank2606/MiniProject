@@ -29,9 +29,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 # App Config
 # -----------------
 class Config:
-    SECRET_KEY = 'supersecretkey123'  # fixed key for dev
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'supersecretkey123')  # Use env var for production
     basedir = os.path.abspath(os.path.dirname(__file__))
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'instance', 'users.db')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///' + os.path.join(basedir, 'instance', 'users.db'))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # Ensure instance folder exists
@@ -113,14 +113,37 @@ except Exception as e:
     logging.warning(f"TFLite model not loaded: {e}")
 
 # -----------------
-# Globals
+# Camera & Globals Setup
 # -----------------
+def init_camera():
+    """Initialize camera with better error handling"""
+    try:
+        # Try different camera indices
+        for camera_index in [0, 1, 2]:
+            cap = cv2.VideoCapture(camera_index)
+            if cap.isOpened():
+                # Test if we can actually read a frame
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    logging.info(f"Camera initialized successfully on index {camera_index}")
+                    return cap
+                else:
+                    cap.release()
+            else:
+                if cap.isOpened():
+                    cap.release()
+        
+        # If no camera found, try to use a video file or create dummy frames
+        logging.warning("No physical camera found. Using simulated video feed.")
+        return None
+        
+    except Exception as e:
+        logging.error(f"Camera initialization error: {e}")
+        return None
+
 camera = None
-if os.getenv('VERCEL') is None:  # Only initialize camera if not on Vercel
-    camera = cv2.VideoCapture(0)
-    if not camera.isOpened():
-        logging.warning("Camera not available. Video feed disabled.")
-        camera = None
+if os.getenv('VERCEL') is None:  # Only try to initialize camera if not on Vercel
+    camera = init_camera()
 else:
     logging.info("Running on Vercel: Camera access disabled.")
 
@@ -129,24 +152,50 @@ frame_lock = threading.Lock()
 data_clients = set()  # connected WebSocket clients
 last_alert_time = 0  # cooldown for theft alerts
 
+# Create a dummy frame for testing
+def create_dummy_frame():
+    """Create a dummy frame when no camera is available"""
+    frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+    cv2.putText(frame, "Camera Not Available", (50, 240), 
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(frame, "Using Simulated Feed", (50, 280), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    return frame
+
 # -----------------
 # Background Threads
 # -----------------
 def capture_frames_thread():
-    """Continuously capture frames from the camera"""
+    """Continuously capture frames from the camera or generate dummy frames"""
     global output_frame
-    if camera is None:
-        logging.info("Camera not initialized. Capture thread disabled.")
-        return
+    frame_count = 0
+    
     while True:
         try:
-            success, frame = camera.read()
-            if success:
+            if camera and camera.isOpened():
+                success, frame = camera.read()
+                if success:
+                    with frame_lock:
+                        output_frame = frame.copy()
+                else:
+                    logging.warning("Failed to read from camera")
+                    with frame_lock:
+                        output_frame = create_dummy_frame()
+            else:
+                # Generate dummy frames with some variation
+                dummy_frame = create_dummy_frame()
+                # Add some visual variation to dummy frames
+                cv2.putText(dummy_frame, f"Frame: {frame_count}", (50, 320), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                frame_count += 1
                 with frame_lock:
-                    output_frame = frame.copy()
+                    output_frame = dummy_frame
+            
             time.sleep(1/30)
         except Exception as e:
             logging.error(f"Frame capture error: {e}")
+            with frame_lock:
+                output_frame = create_dummy_frame()
             time.sleep(1)
 
 def theft_detection_thread():
@@ -326,19 +375,22 @@ def ws_video_feed(ws):
                     continue
                 frame = output_frame.copy()
 
-            # Increase brightness and contrast
-            frame = cv2.convertScaleAbs(frame, alpha=3.0, beta=150)
+            # Increase brightness and contrast for better visibility
+            frame = cv2.convertScaleAbs(frame, alpha=1.5, beta=50)
 
-            small_frame = cv2.resize(frame, (640,480))
+            small_frame = cv2.resize(frame, (640, 480))
             annotated = small_frame
 
             if yolo_model:
-                results = yolo_model(small_frame, stream=False, verbose=False)
-                annotated = results[0].plot()
+                try:
+                    results = yolo_model(small_frame, stream=False, verbose=False)
+                    annotated = results[0].plot()
+                except Exception as e:
+                    logging.error(f"YOLO processing error: {e}")
+                    # Continue with unannotated frame if YOLO fails
 
-            ret, buffer = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY),65])
+            ret, buffer = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
             if ret:
-                logging.debug("Sending frame")
                 ws.send(buffer.tobytes())
 
             time.sleep(1/25)
@@ -351,12 +403,20 @@ def ws_data_updates(ws):
     data_clients.add(ws)
     try:
         while True:
-            ws.wait()
+            ws.receive()  # Wait for any message (or timeout)
+            time.sleep(1)
     except Exception as e:
-        logging.error(f"WebSocket error: {e}")
+        logging.error(f"WebSocket data error: {e}")
     finally:
         if ws in data_clients:
             data_clients.remove(ws)
+
+# -----------------
+# Health Check (Important for Vercel)
+# -----------------
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy", "timestamp": datetime.utcnow().isoformat()})
 
 # -----------------
 # Run App
@@ -366,5 +426,4 @@ if __name__ == '__main__':
     if os.getenv('VERCEL') is None:
         threading.Thread(target=capture_frames_thread, daemon=True).start()
         threading.Thread(target=theft_detection_thread, daemon=True).start()
-    logging.info("Server running at http://127.0.0.1:5000/")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        app.run(host='0.0.0.0', port=5000, debug=False)
