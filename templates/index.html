@@ -336,7 +336,8 @@ function monitorVideoFeed(){
   };
 
   socket.onmessage = (event) => {
-    videoElement.src = URL.createObjectURL(event.data);
+    const blob = new Blob([event.data], {type: 'image/jpeg'});
+    videoElement.src = URL.createObjectURL(blob);
   };
 
   socket.onclose = () => {

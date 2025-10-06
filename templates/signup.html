@@ -131,7 +131,7 @@ a:hover {
     <div class="error-message" id="error-message"></div>
     {% endif %}
 
-    <form method="post" id="signup-form">
+    <form method="post" id="signup-form" action="{{ url_for('signup') }}">
         <div class="input-group">
             <input type="text" name="username" placeholder="Username" required value="{{ request.form.get('username','') }}">
         </div>

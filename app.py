@@ -240,9 +240,18 @@ def signup():
         username = request.form.get('username','').strip()
         email = request.form.get('email','').strip().lower()
         password = request.form.get('password','')
+        confirm_password = request.form.get('confirm_password','')
 
-        if not all([username,email,password]):
+        if not all([username,email,password,confirm_password]):
             flash("All fields required", "danger")
+            return redirect(url_for('signup'))
+
+        if password != confirm_password:
+            flash("Passwords do not match", "danger")
+            return redirect(url_for('signup'))
+
+        if len(password) < 6:
+            flash("Password must be at least 6 characters", "warning")
             return redirect(url_for('signup'))
 
         if User.query.filter_by(email=email).first():
